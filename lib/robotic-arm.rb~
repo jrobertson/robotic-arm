@@ -10,22 +10,18 @@ OFF = 0x00
 class RoboticArm
 
   attr_reader :led, :wrist, :elbow, :shoulder, :base, :grip
-  attr_reader :light, :gripper    # aliases for :led and :grip
 
   class Component
 
     def initialize(robot_arm)  @ra = robot_arm  end
-      
-    protected      
+    def active?()  @active                      end
     
-    def active?()  @active                      end    
+    protected
 
-    def activate(switch, val, seconds=0)  
-      
+    def activate(switch, val, seconds)  
       @active = val >= 0
       @prev_val = val 
       @ra.command(switch, val)
-      
       if seconds > 0 then
         sleep seconds  
         @ra.command(switch, -(val))
@@ -42,8 +38,13 @@ class RoboticArm
       @switch = 2 
     end
 
-    def on(seconds=0)  activate(@switch,  0x01, seconds) unless on?  end
-    def off()          activate(@switch, -0x01) if on?               end
+    def on(seconds=0)
+      activate(@switch, 0x01, seconds) unless on?
+    end
+
+    def off(seconds=0)  
+      activate(@switch, -0x01, seconds) if on?
+    end
 
     alias on? active?
   end
@@ -55,25 +56,34 @@ class RoboticArm
       @switch, @val = 0, OFF  
     end
 
-    protected    
-    
-    def stop()  (@active = false;  activate(@switch, -(@prev_val))) if moving?   end
-
-    alias moving? active?
-                                
-    def activate(switch, val, seconds=0)        
-      (@val = @prev_val; stop) if active?
+    def activate(switch, val, seconds=0)  
+      if active? then
+        @val = @prev_val
+        stop
+      end
       super(switch, val, seconds)
     end
-                
+
+    def stop()
+      if moving? then
+        @active = false
+        activate(@switch, -(@prev_val))
+      end 
+    end
+
+    alias moving? active?
+
   end
 
   class ComponentUpDown < ComponentMoving
 
-    protected
-                
-    def up  (seconds=0)  activate(@switch, @upval,   seconds) end
-    def down(seconds=0)  activate(@switch, @downval, seconds) end
+    def up(seconds=0)
+      activate(@switch, @upval,seconds)
+    end
+
+    def down(seconds=0)
+      activate(@switch, @downval, seconds)
+    end
   end
 
   class Shoulder < ComponentUpDown
@@ -107,14 +117,24 @@ class RoboticArm
       @switch = 1     
     end
 
-    def left (seconds=0)  activate(@switch, @val=0x02, seconds)  end
-    def right(seconds=0)  activate(@switch, @val=0x01, seconds)  end
+    def left(seconds=0)  
+      activate(@switch, @val=0x02, seconds)
+    end
+
+    def right(seconds=0)
+      activate(@switch, @val=0x01, seconds)
+    end
   end
 
-  class Gripper  < ComponentMoving
+  class Grip     < ComponentMoving
 
-    def open (seconds=0)  activate(@switch, @val=0x02, seconds)  end
-    def close(seconds=0)  activate(@switch, @val=0x01, seconds)  end
+    def open(seconds=0)
+      activate(@switch, @val=0x02, seconds)
+    end
+
+    def close(seconds=0)
+      activate(@switch, @val=0x01, seconds)
+    end
   end
 
 
@@ -124,7 +144,10 @@ class RoboticArm
     usb = LIBUSB::Context.new
     arm = usb.devices(:idVendor => 0x1267, :idProduct => 0x0000).first
 
-    (puts "Arm not found!"; exit) unless arm
+    if arm == nil
+      puts "Arm not found!"
+      exit
+    end
 
     # Take control of the device
     @handle = arm.open
@@ -135,10 +158,8 @@ class RoboticArm
     @elbow    = Elbow.new    self
     @shoulder = Shoulder.new self
     @base     = Base.new     self
-    @grip     = Gripper.new  self
+    @grip     = Grip.new     self
     @register = [OFF,OFF,OFF]
-    
-    @light, @gripper = @led, @grip  #aliases
   end  
 
   def left(seconds=0)  @base.left  seconds  end
@@ -150,6 +171,15 @@ class RoboticArm
 
     @register[switch] += val
     handle_command
+  end
+
+  # Send the signal 
+  #
+  def handle_command()
+
+    @handle.control_transfer(:bmRequestType => 0x40, :bRequest => 6, \
+      :wValue => 0x100, :wIndex => 0, :dataOut => @register.pack('CCC'), \
+      :timeout => 1000)
   end
 
   # turn off all active signals
@@ -168,23 +198,6 @@ class RoboticArm
     handle_command
   end
 
-  private
-                
-  # Send the signal 
-  #
-  def handle_command()
-
-    message = { 
-                bmRequestType:  0x40, 
-                     bRequest:  6,
-                       wValue:  0x100, 
-                       wIndex:  0,
-                      dataOut:  @register.pack('CCC'), 
-                      timeout:  1000
-              }
-    @handle.control_transfer message
-  end
-                
 end
 
 if __FILE__ == $0 then

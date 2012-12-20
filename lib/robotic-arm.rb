@@ -51,15 +51,21 @@ class RoboticArm
   end
 
   class ComponentMoving < Component
-
+    
     def initialize(robot_arm)  
       super(robot_arm)
       @switch, @val = 0, OFF  
+      @moving = false
     end
     
-    def stop()  (@active = false;  activate(@switch, -(@prev_val))) if moving?   end
+    def stop()
+      if moving?  then
+        @active = false
+        activate(@switch, -(@prev_val))
+      end
+    end
 
-    alias moving? active?
+    def moving?() @active ? @moving : false  end
     
     protected        
                                 
@@ -72,8 +78,17 @@ class RoboticArm
 
   class ComponentUpDown < ComponentMoving
                 
-    def up  (seconds=0)  activate(@switch, @upval,   seconds) end
-    def down(seconds=0)  activate(@switch, @downval, seconds) end      
+    def up(seconds=0)
+      return if @active and @moving == :up
+      activate(@switch, @upval,   seconds)
+      @moving = :up
+    end
+    
+    def down(seconds=0)
+      return if @active and @moving == :down
+      activate(@switch, @downval, seconds)
+      @moving = :down
+    end      
   end
 
   class Shoulder < ComponentUpDown
@@ -107,14 +122,32 @@ class RoboticArm
       @switch = 1     
     end
 
-    def left (seconds=0)  activate(@switch, @val=0x02, seconds)  end
-    def right(seconds=0)  activate(@switch, @val=0x01, seconds)  end
+    def left(seconds=0)
+      return if @active and @moving == :left
+      activate(@switch, @val=0x02, seconds)
+      @moving = :left  
+    end
+    
+    def right(seconds=0)
+      return if @active and @moving == :right
+      activate(@switch, @val=0x01, seconds)
+      @moving = :right
+    end    
   end
 
   class Gripper  < ComponentMoving
 
-    def open (seconds=0)  activate(@switch, @val=0x02, seconds)  end
-    def close(seconds=0)  activate(@switch, @val=0x01, seconds)  end
+    def open (seconds=0)
+      return if @active and @moving == :open
+      activate(@switch, @val=0x02, seconds)
+      @moving = :open
+    end
+    
+    def close(seconds=0)
+      return if @active and @moving == :close
+      activate(@switch, @val=0x01, seconds)
+      @moving = :close
+    end
   end
 
 

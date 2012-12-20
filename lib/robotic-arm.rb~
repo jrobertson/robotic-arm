@@ -21,6 +21,8 @@ class RoboticArm
     def active?()  @active                      end    
 
     def activate(switch, val, seconds=0)  
+
+      return if val == @previous_val
       
       @active = val >= 0
       @prev_val = val 
@@ -54,12 +56,12 @@ class RoboticArm
       super(robot_arm)
       @switch, @val = 0, OFF  
     end
-
-    protected    
     
     def stop()  (@active = false;  activate(@switch, -(@prev_val))) if moving?   end
 
     alias moving? active?
+    
+    protected        
                                 
     def activate(switch, val, seconds=0)        
       (@val = @prev_val; stop) if active?
@@ -69,11 +71,9 @@ class RoboticArm
   end
 
   class ComponentUpDown < ComponentMoving
-
-    protected
                 
     def up  (seconds=0)  activate(@switch, @upval,   seconds) end
-    def down(seconds=0)  activate(@switch, @downval, seconds) end
+    def down(seconds=0)  activate(@switch, @downval, seconds) end      
   end
 
   class Shoulder < ComponentUpDown
@@ -155,17 +155,17 @@ class RoboticArm
   # turn off all active signals
   #
   def off()    
-    @register= [OFF,OFF,OFF]
-    handle_command
+    led.off if on?
+    stop
     @handle.release_interface(0)
   end
 
   # stop all robotic movement
   #
   def stop()    
-    @register[0] = OFF
-    @register[1] = OFF
-    handle_command
+    [wrist, elbow, shoulder, base, grip].each do |motor| 
+      motor.stop if motor.moving?
+    end
   end
 
   private

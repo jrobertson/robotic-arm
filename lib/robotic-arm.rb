@@ -188,7 +188,7 @@ class RoboticArm
   # turn off all active signals
   #
   def off()    
-    led.off if on?
+    led.off if led.on?
     stop
     @handle.release_interface(0)
   end

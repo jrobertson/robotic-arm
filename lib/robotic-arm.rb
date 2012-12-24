@@ -76,7 +76,7 @@ module Session
     end
 
     def recording?()    @recording  end
-    def playback()      play @rlog  end
+    def playback()      play @log   end
     def reverse_play()  play @rlog  end
 
     private

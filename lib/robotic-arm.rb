@@ -35,39 +35,93 @@ module Session
       @log.first[:time] = @log[1][:time]
       t1 = @log.first[:time]
       @log.first[:sleep] = 0
-      @log[1..-2].each do |record|
+      @log[1..-2].each_with_index do |record,i|
         t2 = record[:time]
-        record[:sleep] = (t2 - t1).round(2)
+        @log[i][:sleep] = (t2 - t1).round(2)
         t1 = t2
       end
-
-
-      @rlog = @log.reverse.map{|x| x.clone}      
-      t1 = @rlog.shift[:time]
-      @rlog.pop
       
-      @rlog[0..-2].each_with_index do |record,i |
-        
-        classname = record[:class]
 
-        tmp = record.clone
-        j = @rlog[(i+1)..-1].map{|x| x[:class]}.index(classname)
-        
-        next unless j
 
-        record[:method] = swap_state @rlog[i+1+j][:method]
-        record[:sleep] = swap_state @rlog[i+1+j][:sleep]
+      matched = []
+      @rlog = @log.map{|x| x.clone}      
+      
+      @rlog.reverse[0..-2].each_with_index do |record,i |
 
-        @rlog[i+1+j][:method] = swap_state tmp[:method]
-        @rlog[i+1+j][:sleep] = tmp[:sleep]
+        next if matched.include? i
 
+        j = @rlog.reverse[(i+1)..-1].map{|x| x[:class]}.index(record[:class])                 
+
+        if j then
+
+          tmp = record.clone
+          record[:method] = @rlog.reverse[i+j+1][:method]
+          record[:sleep] = @rlog.reverse[i+j+1][:sleep]
+          @rlog.reverse[i+j+1][:method] = tmp[:method]
+          @rlog.reverse[i+j+1][:sleep] = tmp[:sleep]
+          matched << i+j+1
+        end
+              
       end
+      
+      @rlog.first[:sleep] = 0
+=begin      
+     # The following code includes factors for adjusting the duration of 
+       robotic arm movements, as I had observed the distance travelled by
+       the arm n a downward motion != distance travelled in a upward motion
+       for a fixed duration.
+       A more accurate approach would be to add offset times for an actual
+       recorded session.
 
+      @rlog.each do |record|
+        
+        if record[:sleep] then
+
+          record[:method] = swap_state record[:method] 
+          
+          if record[:method] == :stop then
+            #record[:sleep] = (record[:sleep] - 0.03).round(2) 
+          elsif record[:class] == :shoulder and record[:method] == :up then
+            record[:sleep] = (record[:sleep] * 1.14).round(2)
+          elsif record[:class] == :elbow and record[:method] == :up then
+            record[:sleep] = (record[:sleep] * 1.14).round(2)            
+          elsif record[:class] == :shoulder and record[:method] == :down then
+            record[:sleep] = (record[:sleep] / 1.14).round(2)
+          elsif record[:class] == :elbow and record[:method] == :down then
+            record[:sleep] = (record[:sleep] / 1.14).round(2)            
+
+          elsif record[:class] == :gripper and record[:method] == :open then
+            record[:sleep] = (record[:sleep] / 1.14).round(2)
+          elsif record[:class] == :gripper and record[:method] == :close then
+            record[:sleep] = (record[:sleep] * 1.14).round(2)                       
+
+          end
+
+        end                        
+      end
+      
+      @log.each do |record|
+        
+        if record[:sleep] then
+          
+          if record[:method] == :stop then
+            #record[:sleep] = (record[:sleep] - 0.03).round(2) 
+          elsif record[:class] == :shoulder and record[:method] == :up then
+            record[:sleep] = (record[:sleep] * 1.24).round(2)
+          elsif record[:class] == :shoulder and record[:method] == :down then
+            record[:sleep] = (record[:sleep] / 1.05).round(2)
+          elsif record[:class] == :elbow and record[:method] == :down then
+            record[:sleep] = (record[:sleep] / 1.05).round(2)            
+          end
+
+        end
+      end
+=end      
       @log
     end
 
     def record(classname, methodname)
-            
+                  
       @log << {
             time: Time.now, 
             class: classname.to_sym, 
@@ -75,9 +129,9 @@ module Session
       }
     end
 
-    def recording?()    @recording  end
-    def playback()      play @log   end
-    def reverse_play()  play @rlog  end
+    def recording?()    @recording         end
+    def playback()      play @log          end
+    def reverse_play()  play @rlog.reverse end
 
     private
 
@@ -85,14 +139,15 @@ module Session
 
       log.each do |record|
         
-        sleep record[:sleep].to_f          
         component, action = *[:class, :method].map{|x| record[x]}
-        
+              
         unless component.nil? then
           @obj.method(component).call.method(action).call
         else
           @obj.method(action).call
         end
+        
+        sleep record[:sleep].to_f            
       end
     end
     
@@ -294,8 +349,10 @@ class RoboticArm
   end  
   
   def inspect() '#<RoboticArm:>' end
-  def left(seconds=0)  @base.left  seconds  end
-  def right(seconds=0) @base.right seconds  end
+  def left (seconds=0)  @base.left      seconds  end
+  def right(seconds=0)  @base.right     seconds  end
+  def up   (seconds=0)  @shoulder.up    seconds  end
+  def down (seconds=0)  @shoulder.down  seconds  end
 
   # register and invoke the robotic action
   #
